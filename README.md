@@ -146,6 +146,19 @@ Per managed switch:
 
 Per reason: `binary_sensor.reason_<name>`, with the opening source and expiry.
 
+And one overview of the whole picture:
+
+- **`sensor.arbiter_reasons`** — how many reasons are in force, with the full set in its
+  attributes: `live` (name, priority, what it wants, which switches, who opened it, when
+  it expires), `idle` (configured but not currently holding anything), `unconfigured`
+  (live reasons with no definition behind them — manual overrides, and the weak
+  placeholders unmapped automations get), and `automations`, which lists what opens and
+  closes each reason.
+
+  The per-reason binary sensors only exist for reasons you configured, so this is the only
+  place a manual override or an unmapped automation's reason shows up as something you can
+  look at on a dashboard.
+
 ### Services
 
 | Service | Purpose |

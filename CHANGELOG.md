@@ -5,6 +5,19 @@ All notable changes to Arbiter are recorded here. Versions follow
 `custom_components/arbiter/manifest.json` is what Home Assistant displays, and the tag of
 the latest published GitHub release is what HACS reports.
 
+## 0.3.0
+
+### Added
+
+- `sensor.arbiter_reasons` — a single overview of every reason. Its state is the number
+  in force; its attributes carry the live set with priorities, switches, opener and
+  expiry, the configured-but-idle ones, the live ones with no definition behind them, and
+  a map of which automations open and close each reason.
+
+  The per-reason `binary_sensor.reason_*` entities are only created for configured
+  reasons, so manual overrides and the placeholders held for unmapped automations
+  previously had no entity at all and were visible only through `arbiter.explain`.
+
 ## 0.2.0
 
 ### Added

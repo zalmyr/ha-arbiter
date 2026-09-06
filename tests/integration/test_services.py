@@ -465,3 +465,100 @@ async def test_reasons_survive_a_restart(
     hub = entry.runtime_data
     assert hub.store.get("daily") is not None
     assert hass.states.get("binary_sensor.reason_daily").state == STATE_ON
+
+
+# -- seeing every reason at once ----------------------------------------------
+
+
+async def test_reason_overview_lists_live_and_idle(
+    hass: HomeAssistant, helpers, switches
+):
+    """One entity answers "what is running" without checking each reason in turn."""
+    await setup_entry(hass, data=DEFAULT_GLOBALS, subentries=BASIC)
+    await flush(hass)
+
+    overview = hass.states.get("sensor.arbiter_reasons")
+    assert overview.state == "0"
+    assert sorted(overview.attributes["idle"]) == ["daily", "night_lockout"]
+
+    await hass.services.async_call(
+        DOMAIN, SERVICE_OPEN, {CONF_REASON: "daily"}, blocking=True
+    )
+    await flush(hass)
+
+    overview = hass.states.get("sensor.arbiter_reasons")
+    assert overview.state == "1"
+    live = overview.attributes["live"]
+    assert [r["name"] for r in live] == ["daily"]
+    assert live[0]["priority"] == 20
+    assert live[0]["wants"] == "on"
+    assert live[0]["configured"] is True
+    assert sorted(live[0]["switches"]) == [HALL, PORCH]
+    assert overview.attributes["idle"] == ["night_lockout"]
+
+
+async def test_reason_overview_shows_reasons_that_have_no_entity(
+    hass: HomeAssistant, helpers, switches, hass_admin_user
+):
+    """A manual override has no binary_sensor of its own, so it must show up here."""
+    await setup_entry(hass, data=DEFAULT_GLOBALS, subentries=BASIC)
+    await flush(hass)
+
+    await hass.services.async_call(
+        DOMAIN,
+        SERVICE_OVERRIDE,
+        {ATTR_ENTITY_ID: [PORCH], CONF_STATE: "on"},
+        blocking=True,
+    )
+    await flush(hass)
+
+    overview = hass.states.get("sensor.arbiter_reasons")
+    manual = f"manual:{PORCH}"
+    assert manual in overview.attributes["unconfigured"]
+    assert manual in [r["name"] for r in overview.attributes["live"]]
+    # ...and it genuinely has no entity of its own, which is why this matters.
+    assert hass.states.get(f"binary_sensor.reason_{manual}") is None
+
+
+async def test_reason_overview_maps_automations_to_reasons(
+    hass: HomeAssistant, helpers, switches
+):
+    """Which automations open and close each reason, in one place."""
+    await setup_entry(hass, data=DEFAULT_GLOBALS, subentries=BASIC)
+    await flush(hass)
+
+    mappings = hass.states.get("sensor.arbiter_reasons").attributes["automations"]
+    assert mappings["daily"]["opens"] == [DAILY_ON]
+    assert mappings["daily"]["closes"] == []
+    # A configured reason nothing maps to still appears, with empty lists.
+    assert mappings["night_lockout"] == {"opens": [], "closes": []}
+
+
+async def test_reason_overview_counts_drop_when_reasons_close(
+    hass: HomeAssistant, helpers, switches
+):
+    """The count follows the live set, including partial releases."""
+    await setup_entry(hass, data=DEFAULT_GLOBALS, subentries=BASIC)
+
+    for reason in ("daily", "night_lockout"):
+        await hass.services.async_call(
+            DOMAIN, SERVICE_OPEN, {CONF_REASON: reason}, blocking=True
+        )
+    await flush(hass)
+    assert hass.states.get("sensor.arbiter_reasons").state == "2"
+
+    # Releasing one switch of a two-switch reason keeps it live.
+    await hass.services.async_call(
+        DOMAIN,
+        SERVICE_CLOSE,
+        {CONF_REASON: "daily", ATTR_TARGETS: [PORCH]},
+        blocking=True,
+    )
+    await flush(hass)
+    assert hass.states.get("sensor.arbiter_reasons").state == "2"
+
+    await hass.services.async_call(
+        DOMAIN, SERVICE_CLOSE, {CONF_REASON: "daily"}, blocking=True
+    )
+    await flush(hass)
+    assert hass.states.get("sensor.arbiter_reasons").state == "1"
