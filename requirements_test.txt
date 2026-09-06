@@ -1,0 +1,4 @@
+# Pulls in a matching Home Assistant, pytest, pytest-asyncio and freezegun.
+# Needs Python 3.13; older interpreters resolve to a Home Assistant too old for
+# config subentries.
+pytest-homeassistant-custom-component

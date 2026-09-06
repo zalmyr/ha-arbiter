@@ -1,0 +1,13 @@
+{
+  "domain": "arbiter",
+  "name": "Arbiter",
+  "codeowners": ["@zalmyr"],
+  "config_flow": true,
+  "dependencies": ["automation"],
+  "documentation": "https://github.com/zalmyr/ha-arbiter",
+  "integration_type": "service",
+  "iot_class": "calculated",
+  "issue_tracker": "https://github.com/zalmyr/ha-arbiter/issues",
+  "requirements": [],
+  "version": "0.1.0"
+}

@@ -1,0 +1,331 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Arbiter",
+        "description": "Arbiter decides what a switch should be doing when several automations disagree. Start in advisory mode: it will watch and report without changing anything.",
+        "data": {
+          "bypass_entity": "Bypass switch",
+          "default_mode": "Default mode",
+          "override_timeout": "Manual override lasts",
+          "override_priority": "Manual override priority",
+          "override_sources": "Automations that count as a person",
+          "unknown_source_priority": "Priority for unmapped automations",
+          "ignore_unknown_sources": "Ignore unmapped automations",
+          "tie_break": "When priorities tie"
+        },
+        "data_description": {
+          "bypass_entity": "While this is on, Arbiter stands down completely and touches nothing.",
+          "default_mode": "Used for any switch that does not set its own.",
+          "override_timeout": "How long a person's action outranks every schedule.",
+          "override_sources": "Scene-button automations belong here: holding a wall switch is a person acting, even though an automation carries it out.",
+          "unknown_source_priority": "An automation with no reason mapping still gets a weak say, so nothing is silently dropped.",
+          "ignore_unknown_sources": "Turn on to drop unmapped automations entirely instead."
+        }
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Arbiter is already set up. Add reasons and switches from its integration page."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Arbiter settings",
+        "data": {
+          "bypass_entity": "Bypass switch",
+          "default_mode": "Default mode",
+          "override_timeout": "Manual override lasts",
+          "override_priority": "Manual override priority",
+          "override_sources": "Automations that count as a person",
+          "unknown_source_priority": "Priority for unmapped automations",
+          "ignore_unknown_sources": "Ignore unmapped automations",
+          "tie_break": "When priorities tie"
+        }
+      }
+    }
+  },
+  "config_subentries": {
+    "reason": {
+      "title": "Reason",
+      "entry_type": "Reason",
+      "initiate_flow": {
+        "user": "Add reason",
+        "reconfigure": "Edit reason"
+      },
+      "step": {
+        "basics": {
+          "title": "What is this reason?",
+          "description": "A reason is why some switches should be on (or off), for as long as it lasts.",
+          "data": {
+            "name": "Name",
+            "priority": "Priority",
+            "state": "It wants the switches",
+            "membership": "Which switches",
+            "lifetime": "How it ends"
+          },
+          "data_description": {
+            "name": "Short and lower case, e.g. daily, guests, holiday.",
+            "priority": "Higher wins. Leave room between levels so you can slot new reasons in later.",
+            "lifetime": "A window opens and closes on a schedule. A latch is opened by one automation and closed by another."
+          }
+        },
+        "membership": {
+          "title": "Which switches",
+          "description": "Pick the switches this reason applies to. A label or area is usually better than a list, because it stays right when you add a switch later.",
+          "data": {
+            "entities": "Switches",
+            "label": "Label",
+            "area": "Area"
+          }
+        },
+        "latch": {
+          "title": "How long it may stay open",
+          "description": "A latch is closed by another automation, which may not run on a given day. This bound is what stops a missed close from pinning the switches indefinitely.",
+          "data": {
+            "max_hold": "Give up after",
+            "condition": "Only while (optional template)"
+          }
+        },
+        "start_kind": {
+          "title": "When does it start?",
+          "data": { "kind": "Start is" }
+        },
+        "start_value": {
+          "title": "Start",
+          "data": {
+            "time": "At",
+            "event": "Sun event",
+            "entity_id": "Entity",
+            "offset": "Offset"
+          },
+          "data_description": {
+            "entity_id": "An input_datetime, or a sensor holding a timestamp such as a calendar-derived time."
+          }
+        },
+        "end_kind": {
+          "title": "When does it end?",
+          "description": "The end is specified independently of the start, so an on-schedule and an off-schedule can come from completely different sources.",
+          "data": { "kind": "End is" }
+        },
+        "end_value": {
+          "title": "End",
+          "data": {
+            "time": "At",
+            "event": "Sun event",
+            "entity_id": "Entity",
+            "offset": "Offset"
+          }
+        },
+        "window_extras": {
+          "title": "Anything else?",
+          "data": {
+            "weekdays": "Only on these days",
+            "condition": "Only while (optional template)"
+          },
+          "data_description": {
+            "weekdays": "Applies to the day the window starts on. Leave empty for every day.",
+            "condition": "Re-checked when the entities it reads change."
+          }
+        }
+      },
+      "abort": {}
+    },
+    "switch": {
+      "title": "Managed switch",
+      "entry_type": "Managed switch",
+      "initiate_flow": {
+        "user": "Add switch",
+        "reconfigure": "Edit switch"
+      },
+      "step": {
+        "user": {
+          "title": "Manage a switch",
+          "data": {
+            "entity_id": "Switch",
+            "mode": "Mode",
+            "default_state": "When no reason is live",
+            "override_timeout": "Manual override lasts (optional)"
+          },
+          "data_description": {
+            "mode": "Advisory watches and reports. Guard also reverts whatever loses. Claims assumes your automations call arbiter.open and arbiter.close directly.",
+            "default_state": "Choose 'unmanaged' to leave the switch alone when nothing is claiming it."
+          }
+        },
+        "reconfigure": {
+          "title": "Edit switch",
+          "data": {
+            "mode": "Mode",
+            "default_state": "When no reason is live",
+            "override_timeout": "Manual override lasts (optional)"
+          }
+        }
+      }
+    },
+    "source": {
+      "title": "Automation mapping",
+      "entry_type": "Automation mapping",
+      "initiate_flow": {
+        "user": "Map an automation",
+        "reconfigure": "Edit mapping"
+      },
+      "step": {
+        "user": {
+          "title": "Map an automation to a reason",
+          "description": "When this automation runs, does it open a reason or close one? An automation that turns things off at the end of an event almost always closes: closing lets whatever else is still live keep the switches on.",
+          "data": {
+            "automation": "Automation",
+            "action": "It",
+            "reason": "The reason"
+          }
+        },
+        "reconfigure": {
+          "title": "Edit mapping",
+          "data": {
+            "automation": "Automation",
+            "action": "It",
+            "reason": "The reason"
+          }
+        }
+      },
+      "abort": {
+        "no_reasons": "Add at least one reason first — a mapping has to point at something."
+      }
+    }
+  },
+  "selector": {
+    "mode": {
+      "options": {
+        "advisory": "Advisory — watch and report only",
+        "guard": "Guard — revert whatever loses",
+        "claims": "Claims — Arbiter is the only writer"
+      }
+    },
+    "tie_break": {
+      "options": {
+        "last_wins": "The most recent reason wins",
+        "first_wins": "The oldest reason wins",
+        "off_wins": "Off wins"
+      }
+    },
+    "state": {
+      "options": { "on": "On", "off": "Off" }
+    },
+    "default_state": {
+      "options": { "on": "On", "off": "Off", "unmanaged": "Leave alone" }
+    },
+    "membership": {
+      "options": {
+        "entities": "A list of switches",
+        "label": "Everything with a label",
+        "area": "Everything in an area"
+      }
+    },
+    "lifetime": {
+      "options": {
+        "window": "A window — starts and ends on a schedule",
+        "latch": "A latch — one automation opens it, another closes it"
+      }
+    },
+    "kind": {
+      "options": {
+        "time": "A time of day",
+        "sun": "A sun event",
+        "entity": "An entity's time"
+      }
+    },
+    "event": {
+      "options": { "sunrise": "Sunrise", "sunset": "Sunset" }
+    },
+    "action": {
+      "options": { "opens": "opens", "closes": "closes" }
+    },
+    "weekdays": {
+      "options": {
+        "mon": "Monday",
+        "tue": "Tuesday",
+        "wed": "Wednesday",
+        "thu": "Thursday",
+        "fri": "Friday",
+        "sat": "Saturday",
+        "sun": "Sunday"
+      }
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "should_be_on": { "name": "Should be on" },
+      "conflict": { "name": "Conflict" }
+    },
+    "sensor": {
+      "winning_reason": { "name": "Winning reason" }
+    },
+    "switch": {
+      "arbitration": { "name": "Arbitration" }
+    }
+  },
+  "services": {
+    "open": {
+      "name": "Open reason",
+      "description": "Open a reason, so the switches it covers are held until it closes or expires.",
+      "fields": {
+        "reason": { "name": "Reason", "description": "The reason's name." },
+        "targets": { "name": "Switches", "description": "Override which switches it covers." },
+        "priority": { "name": "Priority", "description": "Override the configured priority." },
+        "state": { "name": "State", "description": "Override what it asks for." },
+        "duration": { "name": "Duration", "description": "Close it automatically after this long." },
+        "until": { "name": "Until", "description": "Close it automatically at this time." }
+      }
+    },
+    "close": {
+      "name": "Close reason",
+      "description": "Close a reason. The switches fall back to whatever else is still live, or to their fallback state.",
+      "fields": {
+        "reason": { "name": "Reason", "description": "The reason's name." }
+      }
+    },
+    "close_all": {
+      "name": "Close all reasons",
+      "description": "Close every open reason."
+    },
+    "override": {
+      "name": "Override",
+      "description": "Hold a switch the way a person just set it, outranking every schedule.",
+      "fields": {
+        "entity_id": { "name": "Switches", "description": "The switches to hold." },
+        "state": { "name": "State", "description": "What to hold them at." },
+        "duration": { "name": "Duration", "description": "Defaults to the configured override timeout." }
+      }
+    },
+    "clear_overrides": {
+      "name": "Clear overrides",
+      "description": "Drop manual overrides and let the schedules take back over.",
+      "fields": {
+        "entity_id": { "name": "Switches", "description": "Leave empty to clear every override." }
+      }
+    },
+    "set_mode": {
+      "name": "Set mode",
+      "description": "Change how far Arbiter may go for a switch.",
+      "fields": {
+        "entity_id": { "name": "Switches", "description": "The switches to change." },
+        "mode": { "name": "Mode", "description": "Advisory, guard or claims." }
+      }
+    },
+    "explain": {
+      "name": "Explain",
+      "description": "Return the live reasons for each switch, which one is winning and why.",
+      "fields": {
+        "entity_id": { "name": "Switches", "description": "Leave empty for every managed switch." }
+      }
+    },
+    "find_conflicts": {
+      "name": "Find conflicts",
+      "description": "List every automation that can command each managed switch, which ones are switched off, which ones have no reason mapping, and what has actually fought."
+    },
+    "export_config": {
+      "name": "Export configuration",
+      "description": "Return the current configuration as YAML, for version control."
+    }
+  }
+}

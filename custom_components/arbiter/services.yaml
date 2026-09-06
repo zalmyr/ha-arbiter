@@ -1,0 +1,104 @@
+open:
+  fields:
+    reason:
+      required: true
+      example: party
+      selector:
+        text:
+    targets:
+      selector:
+        entity:
+          multiple: true
+          domain:
+            - switch
+            - light
+            - fan
+            - input_boolean
+    priority:
+      selector:
+        number:
+          min: 0
+          max: 100
+          mode: slider
+    state:
+      selector:
+        select:
+          options:
+            - "on"
+            - "off"
+    duration:
+      example: "01:30:00"
+      selector:
+        duration:
+    until:
+      example: "2026-09-06 23:00:00"
+      selector:
+        datetime:
+
+close:
+  fields:
+    reason:
+      required: true
+      example: party
+      selector:
+        text:
+
+close_all:
+
+override:
+  fields:
+    entity_id:
+      required: true
+      selector:
+        entity:
+          multiple: true
+          domain:
+            - switch
+            - light
+            - fan
+            - input_boolean
+    state:
+      required: true
+      selector:
+        select:
+          options:
+            - "on"
+            - "off"
+    duration:
+      example: "01:30:00"
+      selector:
+        duration:
+
+clear_overrides:
+  fields:
+    entity_id:
+      selector:
+        entity:
+          multiple: true
+
+set_mode:
+  fields:
+    entity_id:
+      required: true
+      selector:
+        entity:
+          multiple: true
+    mode:
+      required: true
+      selector:
+        select:
+          options:
+            - advisory
+            - guard
+            - claims
+
+explain:
+  fields:
+    entity_id:
+      selector:
+        entity:
+          multiple: true
+
+find_conflicts:
+
+export_config:

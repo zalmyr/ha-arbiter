@@ -1,0 +1,129 @@
+# An example Arbiter configuration.
+#
+# Everything here can be done through the UI instead — this block exists so a
+# prepared setup can be adopted in a single restart. Paste it into
+# configuration.yaml, restart once, and Arbiter imports it into a config entry.
+# From then on the GUI is the source of truth and this block is ignored; use the
+# arbiter.export_config service to get the current configuration back as YAML.
+#
+# Every switch starts in ADVISORY mode: Arbiter watches, attributes each change to
+# the automation that caused it, and publishes binary_sensor.<switch>_should_be_on
+# without touching anything. Run it that way for a while, compare should_be_on
+# against the real switch states, then move one switch at a time to guard.
+
+arbiter:
+  # While this is on, Arbiter stands down completely. Useful as a kill switch, and
+  # a natural fit if your automations already check a global override boolean.
+  bypass_entity: input_boolean.global_override
+
+  default_mode: advisory
+  tie_break: last_wins
+
+  # Holding a wall switch runs an automation, but it is a person acting. Sources
+  # listed here get the override priority and timeout rather than a schedule's.
+  override_timeout: "01:30:00"
+  override_priority: 100
+  override_sources:
+    - automation.porch_button_held
+
+  # An automation with no mapping below still gets a weak say, so nothing is
+  # silently dropped while you work through them.
+  unknown_source_priority: 10
+  ignore_unknown_sources: false
+
+  switches:
+    - entity_id: switch.porch
+      default_state: "off"
+    - entity_id: switch.hall
+      default_state: "off"
+
+  reasons:
+    # The daily baseline, as one standing state rather than two edge triggers.
+    # This is what stops an event ending at 11am from taking the lights down: the
+    # reason is still live, so closing the event's reason changes nothing.
+    #
+    # The two edges are specified independently, and either can be a clock time, a
+    # sun event plus an offset, or an entity plus an offset.
+    - name: daily
+      priority: 20
+      state: "on"
+      lifetime: window
+      entities: [switch.porch, switch.hall]
+      start:
+        kind: entity
+        entity_id: input_datetime.turn_on_lights_daily
+      end:
+        kind: entity
+        entity_id: input_datetime.turn_off_lights_daily
+
+    # A window driven by the sun, restricted to weekends.
+    - name: weekend_evening
+      priority: 40
+      state: "on"
+      lifetime: window
+      entities: [switch.porch]
+      weekdays: [sat, sun]
+      start:
+        kind: sun
+        event: sunset
+        offset: "-00:30:00"
+      end:
+        kind: time
+        time: "23:00:00"
+
+    # A hard off-window that outranks everything below it. Replaces the pattern of
+    # scheduling a turn_off and hoping nothing turns things back on afterwards.
+    - name: night_lockout
+      priority: 90
+      state: "off"
+      lifetime: window
+      entities: [switch.porch, switch.hall]
+      start:
+        kind: time
+        time: "01:00:00"
+      end:
+        kind: time
+        time: "05:00:00"
+
+    # A latch: opened by one automation and closed by another, which is the right
+    # shape when the end comes from an unrelated schedule. max_hold is mandatory —
+    # it is what stops a close that never runs from pinning the switches forever.
+    - name: party
+      priority: 50
+      state: "on"
+      lifetime: latch
+      entities: [switch.porch, switch.hall]
+      max_hold: "12:00:00"
+
+    # A latch gated by a condition, re-checked whenever the entity it reads changes.
+    - name: holiday
+      priority: 60
+      state: "on"
+      lifetime: latch
+      entities: [switch.porch]
+      max_hold: "24:00:00"
+      condition: "{{ is_state('binary_sensor.holiday', 'on') }}"
+
+  # When an automation runs, does it open a reason or close one?
+  #
+  # An automation that turns things off at the end of an event almost always
+  # CLOSES: closing lets whatever else is still live keep the switches on, so the
+  # lights stay up during the day and go off by themselves at night once nothing
+  # is claiming them. Asserting "off" instead is what causes the classic bug.
+  #
+  # Only latch reasons are mapped here. A window opens and closes on its own
+  # schedule, so pointing a source at one is a mistake and Arbiter will say so.
+  sources:
+    - automation: automation.party_lights_on
+      action: opens
+      reason: party
+    - automation: automation.party_lights_off
+      action: closes
+      reason: party
+
+    - automation: automation.holiday_lights_on
+      action: opens
+      reason: holiday
+    - automation: automation.holiday_lights_off
+      action: closes
+      reason: holiday

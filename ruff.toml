@@ -1,0 +1,17 @@
+# Mirrors Home Assistant core's conventions closely enough that the integration
+# reads like the code it lives beside.
+target-version = "py313"
+line-length = 90
+
+[lint]
+select = ["F", "E", "W", "I", "UP", "B", "SIM", "RUF"]
+ignore = [
+    "E501",    # long lines are handled by the formatter
+    "B008",    # function calls in argument defaults (voluptuous schemas do this)
+    "RUF012",  # ClassVar annotations are not HA's style for entity attributes
+]
+
+[lint.isort]
+combine-as-imports = true
+force-sort-within-sections = true
+known-first-party = ["custom_components", "tests"]
