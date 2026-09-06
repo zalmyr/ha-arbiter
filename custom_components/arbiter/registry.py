@@ -8,6 +8,7 @@ unrelated automation from winning by default.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import datetime
 import logging
@@ -92,8 +93,29 @@ class ReasonStore:
         return previous
 
     def close(self, name: str) -> LiveReason | None:
-        """Close a reason; return it if it was open."""
+        """Close a reason entirely; return it if it was open."""
         return self._live.pop(name, None)
+
+    def release(self, name: str, targets: Iterable[str]) -> LiveReason | None:
+        """Stop a reason covering ``targets``, closing it if none are left.
+
+        Returns the reason as it stood before the release, or None if it was not
+        open. A reason still covering other switches keeps holding them.
+        """
+        reason = self._live.get(name)
+        if reason is None:
+            return None
+
+        remaining = reason.without_targets(targets)
+        if remaining is None:
+            del self._live[name]
+        else:
+            self._live[name] = remaining
+        return reason
+
+    def covering(self, entity_id: str) -> list[LiveReason]:
+        """Return every open reason that currently covers ``entity_id``."""
+        return [r for r in self._live.values() if entity_id in r.targets]
 
     def close_all(self, *, origins: set[Origin] | None = None) -> list[LiveReason]:
         """Close every reason, or only those with the given origins."""

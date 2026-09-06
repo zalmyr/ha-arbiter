@@ -6,6 +6,7 @@ that decides what a switch should be doing — can be tested on its own.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
 from datetime import datetime, time, timedelta
 
@@ -106,6 +107,15 @@ class LiveReason:
     def with_expiry(self, expires: datetime | None) -> LiveReason:
         """Return a copy with a different expiry."""
         return replace(self, expires=expires)
+
+    def without_targets(self, targets: Iterable[str]) -> LiveReason | None:
+        """Return a copy that no longer covers ``targets``.
+
+        Returns None when nothing is left, which the caller treats as the reason
+        being closed outright.
+        """
+        remaining = self.targets - frozenset(targets)
+        return replace(self, targets=remaining) if remaining else None
 
 
 @dataclass(frozen=True, slots=True)

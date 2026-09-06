@@ -694,24 +694,69 @@ class ArbiterHub:
         self.hass.bus.async_fire(EVENT_OPENED, {"reason": name, "source": source})
         await self._debouncer.async_call()
 
-    async def async_close(self, name: str) -> bool:
-        """Close a reason; return True if it was open."""
-        closed = self.store.close(name) is not None
-        if closed:
-            self.hass.bus.async_fire(EVENT_CLOSED, {"reason": name, "source": "service"})
-            await self._debouncer.async_call()
-        return closed
+    async def async_close(
+        self, name: str, targets: Iterable[str] | None = None
+    ) -> bool:
+        """Close a reason; return True if it was open.
 
-    async def async_close_all(self, *, origins: set[Origin] | None = None) -> int:
-        """Close every reason (or every reason of the given origins)."""
-        closed = self.store.close_all(origins=origins)
-        for reason in closed:
-            self.hass.bus.async_fire(
-                EVENT_CLOSED, {"reason": reason.name, "source": "service"}
-            )
-        if closed:
+        Without ``targets`` the reason is dropped entirely. With them it stops
+        covering just those switches and keeps holding the rest, which is what you
+        want when one room's event has ended but the others are still going.
+        """
+        if targets is None:
+            was_open = self.store.close(name) is not None
+            released: list[str] = []
+        else:
+            previous = self.store.release(name, targets)
+            was_open = previous is not None
+            released = sorted(previous.targets & frozenset(targets)) if previous else []
+            if was_open and not released:
+                # The reason was open but covered none of these switches.
+                return False
+
+        if was_open:
+            self._async_fire_closed(name, released)
             await self._debouncer.async_call()
-        return len(closed)
+        return was_open
+
+    async def async_close_all(
+        self,
+        *,
+        origins: set[Origin] | None = None,
+        targets: Iterable[str] | None = None,
+    ) -> int:
+        """Close every reason, or free the given switches from all of them."""
+        if targets is None:
+            closed = self.store.close_all(origins=origins)
+            for reason in closed:
+                self._async_fire_closed(reason.name, [])
+            if closed:
+                await self._debouncer.async_call()
+            return len(closed)
+
+        wanted = frozenset(targets)
+        affected = [
+            reason
+            for reason in self.store.all()
+            if reason.targets & wanted and (origins is None or reason.origin in origins)
+        ]
+        for reason in affected:
+            self.store.release(reason.name, wanted)
+            self._async_fire_closed(reason.name, sorted(reason.targets & wanted))
+        if affected:
+            await self._debouncer.async_call()
+        return len(affected)
+
+    @callback
+    def _async_fire_closed(self, name: str, released: list[str]) -> None:
+        """Announce a close, saying which switches it freed.
+
+        An empty ``released`` means the whole reason went, so a listener can tell a
+        partial release from a full one.
+        """
+        self.hass.bus.async_fire(
+            EVENT_CLOSED, {"reason": name, "source": "service", "released": released}
+        )
 
     async def async_set_mode(self, entity_id: str, mode: Mode) -> None:
         """Change how far the arbiter may go for one switch."""

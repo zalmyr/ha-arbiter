@@ -42,8 +42,27 @@ close:
       example: party
       selector:
         text:
+    targets:
+      selector:
+        entity:
+          multiple: true
+          domain:
+            - switch
+            - light
+            - fan
+            - input_boolean
 
 close_all:
+  fields:
+    targets:
+      selector:
+        entity:
+          multiple: true
+          domain:
+            - switch
+            - light
+            - fan
+            - input_boolean
 
 override:
   fields:

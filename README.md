@@ -150,12 +150,31 @@ Per reason: `binary_sensor.reason_<name>`, with the opening source and expiry.
 
 | Service | Purpose |
 |---|---|
-| `arbiter.open` / `close` / `close_all` | Drive a reason by hand |
+| `arbiter.open` / `close` / `close_all` | Drive a reason by hand. All three take an optional `targets`, so a reason covering several switches can be opened or released on only some of them |
 | `arbiter.override` / `clear_overrides` | Hold a switch the way a person set it |
 | `arbiter.set_mode` | Move a switch between advisory, guard and claims |
 | `arbiter.explain` | What won, what lost, and why |
 | `arbiter.find_conflicts` | Every automation that can command each switch, which are switched off, which have no mapping, and what has actually fought |
 | `arbiter.export_config` | The live configuration as YAML |
+
+#### Releasing part of a reason
+
+`close` without `targets` drops the reason everywhere. With them it releases only those
+switches and keeps holding the rest:
+
+```yaml
+action: arbiter.close
+data:
+  reason: party
+  targets: switch.porch      # the hall is still held by 'party'
+```
+
+Releasing the last switch a reason covers closes it outright. The release lasts until
+something re-opens the reason — a guard-mode source resolves its switches afresh from the
+reason's definition every time it fires, so the full set comes back.
+
+`close_all` takes the same field, which is the one to reach for when a single switch is
+stuck: it frees that switch from everything holding it and leaves the others alone.
 
 `arbiter.explain` is the one to reach for first:
 

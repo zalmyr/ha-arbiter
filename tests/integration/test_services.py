@@ -13,12 +13,14 @@ import pytest
 from pytest_homeassistant_custom_component.common import async_fire_time_changed
 
 from custom_components.arbiter.const import (
+    ATTR_TARGETS,
     CONF_MODE,
     CONF_REASON,
     CONF_STATE,
     DOMAIN,
     SERVICE_CLEAR_OVERRIDES,
     SERVICE_CLOSE,
+    SERVICE_CLOSE_ALL,
     SERVICE_EXPLAIN,
     SERVICE_FIND_CONFLICTS,
     SERVICE_OPEN,
@@ -84,6 +86,110 @@ async def test_open_and_close(hass: HomeAssistant, helpers, switches):
     )
     await flush(hass)
     assert hass.states.get(PORCH).state == STATE_OFF
+
+
+async def test_close_can_release_one_switch(hass: HomeAssistant, helpers, switches):
+    """A reason covering two switches can be let go of on just one of them.
+
+    One room's event ending should not take down a reason the other room is still
+    relying on.
+    """
+    await setup_entry(hass, data=DEFAULT_GLOBALS, subentries=BASIC)
+
+    await hass.services.async_call(
+        DOMAIN, SERVICE_OPEN, {CONF_REASON: "daily"}, blocking=True
+    )
+    await flush(hass)
+    assert hass.states.get(PORCH).state == STATE_ON
+    assert hass.states.get(HALL).state == STATE_ON
+
+    await hass.services.async_call(
+        DOMAIN,
+        SERVICE_CLOSE,
+        {CONF_REASON: "daily", ATTR_TARGETS: [PORCH]},
+        blocking=True,
+    )
+    await flush(hass)
+
+    assert hass.states.get(PORCH).state == STATE_OFF
+    assert hass.states.get(HALL).state == STATE_ON
+    # The reason is still live, just no longer covering the porch.
+    assert hass.states.get("binary_sensor.reason_daily").state == STATE_ON
+    assert hass.states.get("sensor.hall_winning_reason").state == "daily"
+    assert hass.states.get("sensor.porch_winning_reason").state == "unclaimed"
+
+
+async def test_releasing_the_last_switch_closes_the_reason(
+    hass: HomeAssistant, helpers, switches
+):
+    """Once nothing is left to hold, the reason is gone rather than empty."""
+    await setup_entry(hass, data=DEFAULT_GLOBALS, subentries=BASIC)
+
+    await hass.services.async_call(
+        DOMAIN, SERVICE_OPEN, {CONF_REASON: "daily"}, blocking=True
+    )
+    await flush(hass)
+
+    for switch in (PORCH, HALL):
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_CLOSE,
+            {CONF_REASON: "daily", ATTR_TARGETS: [switch]},
+            blocking=True,
+        )
+        await flush(hass)
+
+    assert hass.states.get("binary_sensor.reason_daily").state == STATE_OFF
+    assert hass.states.get(PORCH).state == STATE_OFF
+    assert hass.states.get(HALL).state == STATE_OFF
+
+
+async def test_releasing_a_switch_the_reason_never_covered_changes_nothing(
+    hass: HomeAssistant, helpers, switches
+):
+    """night_lockout only covers the porch, so releasing the hall is a no-op."""
+    await setup_entry(hass, data=DEFAULT_GLOBALS, subentries=BASIC)
+
+    await hass.services.async_call(
+        DOMAIN, SERVICE_OPEN, {CONF_REASON: "night_lockout"}, blocking=True
+    )
+    await flush(hass)
+    assert hass.states.get("binary_sensor.reason_night_lockout").state == STATE_ON
+
+    await hass.services.async_call(
+        DOMAIN,
+        SERVICE_CLOSE,
+        {CONF_REASON: "night_lockout", ATTR_TARGETS: [HALL]},
+        blocking=True,
+    )
+    await flush(hass)
+
+    assert hass.states.get("binary_sensor.reason_night_lockout").state == STATE_ON
+    assert hass.states.get("sensor.porch_winning_reason").state == "night_lockout"
+
+
+async def test_close_all_can_free_one_switch(hass: HomeAssistant, helpers, switches):
+    """Free a stuck switch from everything holding it, without touching the others."""
+    await setup_entry(hass, data=DEFAULT_GLOBALS, subentries=BASIC)
+
+    await hass.services.async_call(
+        DOMAIN, SERVICE_OPEN, {CONF_REASON: "daily"}, blocking=True
+    )
+    await hass.services.async_call(
+        DOMAIN, SERVICE_OPEN, {CONF_REASON: "night_lockout"}, blocking=True
+    )
+    await flush(hass)
+
+    await hass.services.async_call(
+        DOMAIN, SERVICE_CLOSE_ALL, {ATTR_TARGETS: [PORCH]}, blocking=True
+    )
+    await flush(hass)
+
+    # Nothing claims the porch any more; the hall is still held by daily.
+    assert hass.states.get("sensor.porch_winning_reason").state == "unclaimed"
+    assert hass.states.get(PORCH).state == STATE_OFF
+    assert hass.states.get("sensor.hall_winning_reason").state == "daily"
+    assert hass.states.get(HALL).state == STATE_ON
 
 
 async def test_open_with_a_duration_expires(

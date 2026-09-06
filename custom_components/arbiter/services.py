@@ -75,7 +75,14 @@ OPEN_SCHEMA = vol.Schema(
     }
 )
 
-CLOSE_SCHEMA = vol.Schema({vol.Required(CONF_REASON): cv.string})
+CLOSE_SCHEMA = vol.Schema(
+    {
+        vol.Required(CONF_REASON): cv.string,
+        vol.Optional(ATTR_TARGETS): cv.entity_ids,
+    }
+)
+
+CLOSE_ALL_SCHEMA = vol.Schema({vol.Optional(ATTR_TARGETS): cv.entity_ids})
 
 OVERRIDE_SCHEMA = vol.Schema(
     {
@@ -128,10 +135,12 @@ def async_register_services(hass: HomeAssistant) -> None:
         )
 
     async def _close(call: ServiceCall) -> None:
-        await _hub(hass).async_close(call.data[CONF_REASON])
+        await _hub(hass).async_close(
+            call.data[CONF_REASON], targets=call.data.get(ATTR_TARGETS)
+        )
 
     async def _close_all(call: ServiceCall) -> None:
-        await _hub(hass).async_close_all()
+        await _hub(hass).async_close_all(targets=call.data.get(ATTR_TARGETS))
 
     async def _override(call: ServiceCall) -> None:
         hub = _hub(hass)
@@ -177,7 +186,9 @@ def async_register_services(hass: HomeAssistant) -> None:
 
     hass.services.async_register(DOMAIN, SERVICE_OPEN, _open, schema=OPEN_SCHEMA)
     hass.services.async_register(DOMAIN, SERVICE_CLOSE, _close, schema=CLOSE_SCHEMA)
-    hass.services.async_register(DOMAIN, SERVICE_CLOSE_ALL, _close_all)
+    hass.services.async_register(
+        DOMAIN, SERVICE_CLOSE_ALL, _close_all, schema=CLOSE_ALL_SCHEMA
+    )
     hass.services.async_register(DOMAIN, SERVICE_OVERRIDE, _override, schema=OVERRIDE_SCHEMA)
     hass.services.async_register(
         DOMAIN, SERVICE_CLEAR_OVERRIDES, _clear_overrides, schema=CLEAR_OVERRIDES_SCHEMA

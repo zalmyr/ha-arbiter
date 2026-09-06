@@ -89,7 +89,9 @@
         },
         "start_kind": {
           "title": "When does it start?",
-          "data": { "kind": "Start is" }
+          "data": {
+            "kind": "Start is"
+          }
         },
         "start_value": {
           "title": "Start",
@@ -106,7 +108,9 @@
         "end_kind": {
           "title": "When does it end?",
           "description": "The end is specified independently of the start, so an on-schedule and an off-schedule can come from completely different sources.",
-          "data": { "kind": "End is" }
+          "data": {
+            "kind": "End is"
+          }
         },
         "end_value": {
           "title": "End",
@@ -209,10 +213,17 @@
       }
     },
     "state": {
-      "options": { "on": "On", "off": "Off" }
+      "options": {
+        "on": "On",
+        "off": "Off"
+      }
     },
     "default_state": {
-      "options": { "on": "On", "off": "Off", "unmanaged": "Leave alone" }
+      "options": {
+        "on": "On",
+        "off": "Off",
+        "unmanaged": "Leave alone"
+      }
     },
     "membership": {
       "options": {
@@ -235,10 +246,16 @@
       }
     },
     "event": {
-      "options": { "sunrise": "Sunrise", "sunset": "Sunset" }
+      "options": {
+        "sunrise": "Sunrise",
+        "sunset": "Sunset"
+      }
     },
     "action": {
-      "options": { "opens": "opens", "closes": "closes" }
+      "options": {
+        "opens": "opens",
+        "closes": "closes"
+      }
     },
     "weekdays": {
       "options": {
@@ -254,14 +271,22 @@
   },
   "entity": {
     "binary_sensor": {
-      "should_be_on": { "name": "Should be on" },
-      "conflict": { "name": "Conflict" }
+      "should_be_on": {
+        "name": "Should be on"
+      },
+      "conflict": {
+        "name": "Conflict"
+      }
     },
     "sensor": {
-      "winning_reason": { "name": "Winning reason" }
+      "winning_reason": {
+        "name": "Winning reason"
+      }
     },
     "switch": {
-      "arbitration": { "name": "Arbitration" }
+      "arbitration": {
+        "name": "Arbitration"
+      }
     }
   },
   "services": {
@@ -269,54 +294,106 @@
       "name": "Open reason",
       "description": "Open a reason, so the switches it covers are held until it closes or expires.",
       "fields": {
-        "reason": { "name": "Reason", "description": "The reason's name." },
-        "targets": { "name": "Switches", "description": "Override which switches it covers." },
-        "priority": { "name": "Priority", "description": "Override the configured priority." },
-        "state": { "name": "State", "description": "Override what it asks for." },
-        "duration": { "name": "Duration", "description": "Close it automatically after this long." },
-        "until": { "name": "Until", "description": "Close it automatically at this time." }
+        "reason": {
+          "name": "Reason",
+          "description": "The reason's name."
+        },
+        "targets": {
+          "name": "Switches",
+          "description": "Override which switches it covers."
+        },
+        "priority": {
+          "name": "Priority",
+          "description": "Override the configured priority."
+        },
+        "state": {
+          "name": "State",
+          "description": "Override what it asks for."
+        },
+        "duration": {
+          "name": "Duration",
+          "description": "Close it automatically after this long."
+        },
+        "until": {
+          "name": "Until",
+          "description": "Close it automatically at this time."
+        }
       }
     },
     "close": {
       "name": "Close reason",
       "description": "Close a reason. The switches fall back to whatever else is still live, or to their fallback state.",
       "fields": {
-        "reason": { "name": "Reason", "description": "The reason's name." }
+        "reason": {
+          "name": "Reason",
+          "description": "The reason's name."
+        },
+        "targets": {
+          "name": "Switches",
+          "description": "Release only these switches and leave the reason holding the rest. Leave empty to close it everywhere. The release lasts until something re-opens the reason, which restores its full set of switches."
+        }
       }
     },
     "close_all": {
       "name": "Close all reasons",
-      "description": "Close every open reason."
+      "description": "Close every open reason, or free particular switches from all of them.",
+      "fields": {
+        "targets": {
+          "name": "Switches",
+          "description": "Free only these switches. Reasons covering others keep holding them. Leave empty to close every reason entirely."
+        }
+      }
     },
     "override": {
       "name": "Override",
       "description": "Hold a switch the way a person just set it, outranking every schedule.",
       "fields": {
-        "entity_id": { "name": "Switches", "description": "The switches to hold." },
-        "state": { "name": "State", "description": "What to hold them at." },
-        "duration": { "name": "Duration", "description": "Defaults to the configured override timeout." }
+        "entity_id": {
+          "name": "Switches",
+          "description": "The switches to hold."
+        },
+        "state": {
+          "name": "State",
+          "description": "What to hold them at."
+        },
+        "duration": {
+          "name": "Duration",
+          "description": "Defaults to the configured override timeout."
+        }
       }
     },
     "clear_overrides": {
       "name": "Clear overrides",
       "description": "Drop manual overrides and let the schedules take back over.",
       "fields": {
-        "entity_id": { "name": "Switches", "description": "Leave empty to clear every override." }
+        "entity_id": {
+          "name": "Switches",
+          "description": "Leave empty to clear every override."
+        }
       }
     },
     "set_mode": {
       "name": "Set mode",
       "description": "Change how far Arbiter may go for a switch.",
       "fields": {
-        "entity_id": { "name": "Switches", "description": "The switches to change." },
-        "mode": { "name": "Mode", "description": "Advisory, guard or claims." }
+        "entity_id": {
+          "name": "Switches",
+          "description": "The switches to change."
+        },
+        "mode": {
+          "name": "Mode",
+          "description": "Advisory, guard or claims."
+        }
       }
     },
     "explain": {
       "name": "Explain",
       "description": "Return the live reasons for each switch, which one is winning and why.",
       "fields": {
-        "entity_id": { "name": "Switches", "description": "Leave empty for every managed switch." }
+        "entity_id": {
+          "name": "Switches",
+          "description": "Leave empty for every managed switch."
+        }
       }
     },
     "find_conflicts": {
