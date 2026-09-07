@@ -5,14 +5,18 @@ from __future__ import annotations
 import logging
 
 from homeassistant.config_entries import SOURCE_IMPORT, ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.typing import ConfigType
 import voluptuous as vol
 
 from .const import DOMAIN, PLATFORMS
 from .hub import ArbiterHub
 from .schema import CONFIG_YAML, build_config
-from .services import async_register_services, async_unregister_services
+from .services import (
+    async_refresh_reason_options,
+    async_register_services,
+    async_unregister_services,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -45,6 +49,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ArbiterConfigEntry) -> b
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     async_register_services(hass)
 
+    # The `reason` dropdowns can only list what exists, and what exists changes as
+    # reasons open and close. Wiring this here rather than inside the hub keeps the
+    # hub from having to know about the service layer.
+    @callback
+    def _reason_options_changed() -> None:
+        async_refresh_reason_options(hass, hub)
+
+    entry.async_on_unload(hub.async_add_listener(_reason_options_changed))
+    async_refresh_reason_options(hass, hub)
+
     # Fires for options changes *and* for any subentry being added, edited or
     # removed, so every kind of config change takes effect the same way.
     entry.async_on_unload(entry.add_update_listener(_async_reload))
@@ -56,6 +70,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ArbiterConfigEntry) -> 
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unloaded:
         await entry.runtime_data.async_unload()
+        # Drop the remembered option lists so a reload re-publishes them.
+        hass.data.pop(DOMAIN, None)
         if not hass.config_entries.async_loaded_entries(DOMAIN):
             async_unregister_services(hass)
     return unloaded

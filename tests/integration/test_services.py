@@ -8,7 +8,9 @@ from datetime import timedelta
 from freezegun.api import FrozenDateTimeFactory
 from homeassistant.const import ATTR_ENTITY_ID, STATE_OFF, STATE_ON
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import entity_registry as er, label_registry as lr
+from homeassistant.helpers.service import async_get_all_descriptions
 import pytest
 from pytest_homeassistant_custom_component.common import async_fire_time_changed
 
@@ -562,3 +564,81 @@ async def test_reason_overview_counts_drop_when_reasons_close(
     )
     await flush(hass)
     assert hass.states.get("sensor.arbiter_reasons").state == "1"
+
+
+# -- the reason picker --------------------------------------------------------
+
+
+async def reason_options(hass: HomeAssistant, service: str) -> list[str]:
+    """The options the UI would show for a service's reason field."""
+    descriptions = await async_get_all_descriptions(hass)
+    field = descriptions[DOMAIN][service]["fields"][CONF_REASON]
+    return field["selector"]["select"]["options"]
+
+
+async def test_reason_options_track_what_exists(hass: HomeAssistant, helpers, switches):
+    """open offers the defined reasons; close also offers whatever is live."""
+    await setup_entry(hass, data=DEFAULT_GLOBALS, subentries=BASIC)
+    await flush(hass)
+
+    assert await reason_options(hass, SERVICE_OPEN) == ["daily", "night_lockout"]
+    assert await reason_options(hass, SERVICE_CLOSE) == ["daily", "night_lockout"]
+
+    # A manual override is live but undefined, so only close should learn about it.
+    await hass.services.async_call(
+        DOMAIN,
+        SERVICE_OVERRIDE,
+        {ATTR_ENTITY_ID: [PORCH], CONF_STATE: "on"},
+        blocking=True,
+    )
+    await flush(hass)
+
+    manual = f"manual:{PORCH}"
+    assert manual in await reason_options(hass, SERVICE_CLOSE)
+    assert manual not in await reason_options(hass, SERVICE_OPEN)
+
+
+async def test_open_refuses_an_unknown_reason(hass: HomeAssistant, helpers, switches):
+    """Typing a name that is not defined is an error, not a new reason."""
+    await setup_entry(hass, data=DEFAULT_GLOBALS, subentries=BASIC)
+    await flush(hass)
+
+    with pytest.raises(ServiceValidationError, match="does not know the reason"):
+        await hass.services.async_call(
+            DOMAIN, SERVICE_OPEN, {CONF_REASON: "dailly"}, blocking=True
+        )
+
+
+async def test_close_refuses_an_unknown_reason(hass: HomeAssistant, helpers, switches):
+    """A typo here used to be a silent no-op, which is the whole point of refusing."""
+    await setup_entry(hass, data=DEFAULT_GLOBALS, subentries=BASIC)
+    await flush(hass)
+
+    with pytest.raises(ServiceValidationError, match="daily"):
+        await hass.services.async_call(
+            DOMAIN, SERVICE_CLOSE, {CONF_REASON: "dailly"}, blocking=True
+        )
+
+
+async def test_close_accepts_a_live_unconfigured_reason(
+    hass: HomeAssistant, helpers, switches
+):
+    """A manual override has no definition, but it must still be closable."""
+    await setup_entry(hass, data=DEFAULT_GLOBALS, subentries=BASIC)
+    await flush(hass)
+
+    await hass.services.async_call(
+        DOMAIN,
+        SERVICE_OVERRIDE,
+        {ATTR_ENTITY_ID: [PORCH], CONF_STATE: "on"},
+        blocking=True,
+    )
+    await flush(hass)
+    assert hass.states.get(PORCH).state == STATE_ON
+
+    await hass.services.async_call(
+        DOMAIN, SERVICE_CLOSE, {CONF_REASON: f"manual:{PORCH}"}, blocking=True
+    )
+    await flush(hass)
+
+    assert hass.states.get(PORCH).state == STATE_OFF

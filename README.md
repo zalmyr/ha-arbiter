@@ -121,6 +121,8 @@ We found a custom integration arbiter which has not been tested by Home Assistan
 Everything is configured in the UI. Reasons, managed switches and automation mappings are
 config *subentries*, so each gets its own add / edit / delete row on the integration page.
 
+When you map an automation to a reason, the dropdown lists the latch reasons you have defined plus **➕ Create a new reason…**, so a reason can be defined without abandoning the mapping you were part-way through. Window reasons are left out on purpose: they open and close on their own schedule, so a mapping pointed at one would be ignored.
+
 ### Or bootstrap from YAML
 
 [`arbiter.example.yaml`](arbiter.example.yaml) is a worked example covering both lifetimes,
@@ -171,6 +173,10 @@ And one overview of the whole picture:
 | `arbiter.export_config` | The live configuration as YAML |
 
 #### Releasing part of a reason
+
+The `reason` field is a dropdown of the reasons that exist — `open` lists the ones you
+have defined, `close` also lists whatever is live, so a manual override can be closed
+too. A name that is not on the list is refused rather than silently doing nothing.
 
 `close` without `targets` drops the reason everywhere. With them it releases only those
 switches and keeps holding the rest:

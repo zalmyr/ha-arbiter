@@ -5,6 +5,31 @@ All notable changes to Arbiter are recorded here. Versions follow
 `custom_components/arbiter/manifest.json` is what Home Assistant displays, and the tag of
 the latest published GitHub release is what HACS reports.
 
+## 0.4.0
+
+### Added
+
+- The `reason` field on `arbiter.open` and `arbiter.close` is a dropdown of the reasons
+  that actually exist, rather than free text. `open` lists the ones you have defined;
+  `close` also lists whatever is currently live, so a manual override or an unmapped
+  automation's placeholder can be closed rather than merely watched.
+- The automation-mapping form can define a reason without leaving it. Picking
+  **➕ Create a new reason…** collects the essentials, saves a real reason, and finishes
+  the mapping that needed it. Previously the form aborted outright when no reasons
+  existed, which was a dead end.
+
+### Changed
+
+- **`arbiter.open` and `arbiter.close` now refuse a reason name that is not known**,
+  raising with the valid names listed. A mistyped name in `close` used to do nothing and
+  report nothing. This is a behaviour change for anyone calling `arbiter.open` from YAML
+  with an ad-hoc name — define the reason first, or use `arbiter.override` for a one-off
+  hold. Overrides themselves are unaffected.
+- The mapping form lists only **latch** reasons. A source pointed at a window was already
+  ignored and reported as a config problem, since a window opens and closes on its own
+  schedule; leaving them out prevents the mistake instead of explaining it afterwards. An
+  existing mapping keeps whatever it already points at when you edit it.
+
 ## 0.3.0
 
 ### Added

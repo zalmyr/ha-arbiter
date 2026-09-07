@@ -14,6 +14,7 @@ from homeassistant.config_entries import (
     ConfigEntry,
     ConfigFlow,
     ConfigFlowResult,
+    ConfigSubentry,
     ConfigSubentryData,
     ConfigSubentryFlow,
     OptionsFlow,
@@ -45,11 +46,14 @@ from .const import (
 )
 from .schema import (
     CONFIG_YAML,
+    CREATE_REASON,
     boundary_kind_schema,
     boundary_schema,
     global_schema,
     latch_schema,
     membership_schema,
+    quick_reason_data,
+    quick_reason_schema,
     reason_basics_schema,
     source_schema,
     switch_schema,
@@ -365,28 +369,71 @@ class SourceSubentryFlow(ConfigSubentryFlow):
     the lights down mid-morning and leaving the daily schedule holding them up.
     """
 
+    def __init__(self) -> None:
+        self._pending: dict[str, Any] = {}
+
     @callback
-    def _reason_names(self) -> list[str]:
-        """Offer the reasons that already exist, so the mapping cannot dangle."""
+    def _reason_names(self, *, keep: str | None = None) -> list[str]:
+        """Offer the latch reasons, so a mapping cannot dangle or misfire.
+
+        Windows are left out deliberately: they open and close on their own
+        schedule, so a source pointed at one is ignored and reported as a config
+        problem. ``keep`` forces an entry back in, so editing an existing mapping
+        never silently loses what it already points at.
+        """
         entry = self._get_entry()
-        return sorted(
+        names = {
             subentry.data[CONF_NAME]
             for subentry in entry.subentries.values()
             if subentry.subentry_type == SUBENTRY_REASON
-        )
+            and subentry.data.get(CONF_LIFETIME) == Lifetime.LATCH.value
+        }
+        if keep:
+            names.add(keep)
+        return sorted(names)
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> SubentryFlowResult:
-        """Add a mapping."""
-        names = self._reason_names()
-        if not names:
-            return self.async_abort(reason="no_reasons")
-
+        """Add a mapping, defining the reason inline if it does not exist yet."""
         if user_input is not None:
+            if user_input[CONF_REASON] == CREATE_REASON:
+                self._pending = user_input
+                return await self.async_step_create_reason()
             return self.async_create_entry(title=_source_title(user_input), data=user_input)
 
-        return self.async_show_form(step_id="user", data_schema=source_schema(names))
+        return self.async_show_form(
+            step_id="user", data_schema=source_schema(self._reason_names())
+        )
+
+    async def async_step_create_reason(
+        self, user_input: dict[str, Any] | None = None
+    ) -> SubentryFlowResult:
+        """Define a reason here, then finish the mapping that needed it."""
+        if user_input is not None:
+            name = user_input[CONF_NAME]
+            self.hass.config_entries.async_add_subentry(
+                self._get_entry(),
+                ConfigSubentry(
+                    data=quick_reason_data(user_input),
+                    subentry_type=SUBENTRY_REASON,
+                    title=name,
+                    unique_id=f"reason:{name}",
+                ),
+            )
+            mapping = {**self._pending, CONF_REASON: name}
+            if self.source == "reconfigure":
+                return self.async_update_and_abort(
+                    self._get_entry(),
+                    self._get_reconfigure_subentry(),
+                    title=_source_title(mapping),
+                    data=mapping,
+                )
+            return self.async_create_entry(title=_source_title(mapping), data=mapping)
+
+        return self.async_show_form(
+            step_id="create_reason", data_schema=quick_reason_schema()
+        )
 
     async def async_step_reconfigure(
         self, user_input: dict[str, Any] | None = None
@@ -396,6 +443,9 @@ class SourceSubentryFlow(ConfigSubentryFlow):
         current = dict(subentry.data)
 
         if user_input is not None:
+            if user_input[CONF_REASON] == CREATE_REASON:
+                self._pending = user_input
+                return await self.async_step_create_reason()
             return self.async_update_and_abort(
                 self._get_entry(),
                 subentry,
@@ -405,7 +455,9 @@ class SourceSubentryFlow(ConfigSubentryFlow):
 
         return self.async_show_form(
             step_id="reconfigure",
-            data_schema=source_schema(self._reason_names(), current),
+            data_schema=source_schema(
+                self._reason_names(keep=current.get(CONF_REASON)), current
+            ),
         )
 
 

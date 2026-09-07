@@ -26,6 +26,7 @@ from homeassistant.helpers import (
     device_registry as dr,
     entity_registry as er,
 )
+from homeassistant.helpers.service import async_set_service_schema
 from homeassistant.util import dt as dt_util
 import voluptuous as vol
 import yaml
@@ -63,6 +64,10 @@ from .const import (
 from .hub import ArbiterHub, manual_reason_name
 
 _LOGGER = logging.getLogger(__name__)
+
+#: Where the last-pushed option lists are remembered, so the schema is only
+#: re-registered when the set of reasons actually changes.
+_OPTIONS_CACHE = "reason_options"
 
 OPEN_SCHEMA = vol.Schema(
     {
@@ -113,6 +118,110 @@ def _hub(hass: HomeAssistant) -> ArbiterHub:
     return entries[0].runtime_data
 
 
+@callback
+def _openable(hub: ArbiterHub) -> list[str]:
+    """Reasons `open` will accept: the ones actually defined."""
+    return sorted(hub.config.reasons)
+
+
+@callback
+def _closeable(hub: ArbiterHub) -> list[str]:
+    """Reasons `close` will accept.
+
+    Includes reasons that are live without being configured — manual overrides and
+    the placeholders unmapped automations get. They show up in
+    ``sensor.arbiter_reasons``, so they have to be closable too.
+    """
+    live = {reason.name for reason in hub.store.live(dt_util.utcnow())}
+    return sorted(set(hub.config.reasons) | live)
+
+
+@callback
+def _require_known(name: str, allowed: list[str], service: str) -> None:
+    """Refuse a reason name that is not on the list.
+
+    A typo used to be silent: `close` on a name nothing matched did nothing and
+    reported nothing.
+    """
+    if name in allowed:
+        return
+    known = ", ".join(allowed) if allowed else "none are defined yet"
+    raise ServiceValidationError(
+        f"{DOMAIN}.{service} does not know the reason {name!r}. Valid reasons: {known}."
+    )
+
+
+#: Entity picker matching the domains a reason can drive.
+_SWITCHES_SELECTOR = {
+    "entity": {
+        "multiple": True,
+        "domain": ["switch", "light", "fan", "input_boolean"],
+    }
+}
+
+
+@callback
+def _reason_field(options: list[str]) -> dict[str, Any]:
+    """A dropdown of reason names, with no free-text escape hatch."""
+    return {
+        "required": True,
+        "selector": {"select": {"options": options, "mode": "dropdown", "sort": True}},
+    }
+
+
+@callback
+def _open_description(options: list[str]) -> dict[str, Any]:
+    """The `open` form, mirroring services.yaml but with a real reason picker."""
+    return {
+        "fields": {
+            CONF_REASON: _reason_field(options),
+            ATTR_TARGETS: {"selector": _SWITCHES_SELECTOR},
+            CONF_PRIORITY: {
+                "selector": {"number": {"min": 0, "max": 100, "mode": "slider"}}
+            },
+            CONF_STATE: {
+                "selector": {
+                    "select": {
+                        "options": [DesiredState.ON.value, DesiredState.OFF.value]
+                    }
+                }
+            },
+            ATTR_DURATION: {"selector": {"duration": None}},
+            ATTR_UNTIL: {"selector": {"datetime": None}},
+        }
+    }
+
+
+@callback
+def _close_description(options: list[str]) -> dict[str, Any]:
+    """The `close` form."""
+    return {
+        "fields": {
+            CONF_REASON: _reason_field(options),
+            ATTR_TARGETS: {"selector": _SWITCHES_SELECTOR},
+        }
+    }
+
+
+@callback
+def async_refresh_reason_options(hass: HomeAssistant, hub: ArbiterHub) -> None:
+    """Point the `reason` dropdowns at the reasons that exist right now.
+
+    services.yaml can only describe a static text box, so the option lists are
+    pushed at runtime and re-pushed whenever the set of reasons changes. The
+    translations still supply the field names and descriptions.
+    """
+    openable, closeable = _openable(hub), _closeable(hub)
+
+    cache = hass.data.setdefault(DOMAIN, {})
+    if cache.get(_OPTIONS_CACHE) == (openable, closeable):
+        return
+    cache[_OPTIONS_CACHE] = (openable, closeable)
+
+    async_set_service_schema(hass, DOMAIN, SERVICE_OPEN, _open_description(openable))
+    async_set_service_schema(hass, DOMAIN, SERVICE_CLOSE, _close_description(closeable))
+
+
 def async_register_services(hass: HomeAssistant) -> None:
     """Register every arbiter service, once."""
     if hass.services.has_service(DOMAIN, SERVICE_OPEN):
@@ -120,6 +229,7 @@ def async_register_services(hass: HomeAssistant) -> None:
 
     async def _open(call: ServiceCall) -> None:
         hub = _hub(hass)
+        _require_known(call.data[CONF_REASON], _openable(hub), SERVICE_OPEN)
         expires = call.data.get(ATTR_UNTIL)
         if expires is not None:
             expires = dt_util.as_utc(expires)
@@ -135,7 +245,9 @@ def async_register_services(hass: HomeAssistant) -> None:
         )
 
     async def _close(call: ServiceCall) -> None:
-        await _hub(hass).async_close(
+        hub = _hub(hass)
+        _require_known(call.data[CONF_REASON], _closeable(hub), SERVICE_CLOSE)
+        await hub.async_close(
             call.data[CONF_REASON], targets=call.data.get(ATTR_TARGETS)
         )
 

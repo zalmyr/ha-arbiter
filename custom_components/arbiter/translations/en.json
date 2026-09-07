@@ -181,6 +181,9 @@
             "automation": "Automation",
             "action": "It",
             "reason": "The reason"
+          },
+          "data_description": {
+            "reason": "Only latch reasons are listed. A window opens and closes on its own schedule, so a mapping pointed at one would be ignored. Pick ➕ Create a new reason… to define one without leaving this form."
           }
         },
         "reconfigure": {
@@ -190,10 +193,23 @@
             "action": "It",
             "reason": "The reason"
           }
+        },
+        "create_reason": {
+          "title": "Create a reason",
+          "description": "A latch: one automation opens it, another closes it. That is the only kind a mapping can point at. You can refine it later on the integration page.",
+          "data": {
+            "name": "Name",
+            "priority": "Priority",
+            "state": "It wants the switches",
+            "entities": "Switches",
+            "max_hold": "Give up after"
+          },
+          "data_description": {
+            "name": "Short and lower case, e.g. party, guests, holiday.",
+            "priority": "Higher wins. Leave room between levels so you can slot new reasons in later.",
+            "max_hold": "The automation meant to close this may not run on a given day. This bound is what stops a missed close from pinning the switches indefinitely."
+          }
         }
-      },
-      "abort": {
-        "no_reasons": "Add at least one reason first — a mapping has to point at something."
       }
     }
   },

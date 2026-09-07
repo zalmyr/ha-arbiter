@@ -333,11 +333,27 @@ def switch_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
     return vol.Schema(schema)
 
 
+#: Chosen from the reason dropdown to define a new one without leaving the form.
+CREATE_REASON = "__create__"
+
+
 def source_schema(
     reason_names: list[str], defaults: dict[str, Any] | None = None
 ) -> vol.Schema:
-    """The automation-to-reason mapping form."""
+    """The automation-to-reason mapping form.
+
+    ``reason_names`` should be latch reasons only. A window opens and closes on its
+    own schedule, so pointing a source at one is a mistake — leaving them out of the
+    list prevents it rather than reporting it afterwards.
+    """
     defaults = defaults or {}
+    options = [
+        selector.SelectOptionDict(value=name, label=name) for name in reason_names
+    ]
+    options.append(
+        # The heavy plus is deliberate: it reads as a button in the dropdown.
+        selector.SelectOptionDict(value=CREATE_REASON, label="➕ Create a new reason…")  # noqa: RUF001
+    )
     return vol.Schema(
         {
             vol.Required(
@@ -349,14 +365,58 @@ def source_schema(
             ): _select(tuple(a.value for a in SourceAction), CONF_ACTION),
             vol.Required(
                 CONF_REASON,
-                default=defaults.get(CONF_REASON, reason_names[0] if reason_names else ""),
+                default=defaults.get(
+                    CONF_REASON, reason_names[0] if reason_names else CREATE_REASON
+                ),
             ): selector.SelectSelector(
                 selector.SelectSelectorConfig(
-                    options=reason_names, mode=selector.SelectSelectorMode.DROPDOWN
+                    options=options, mode=selector.SelectSelectorMode.DROPDOWN
                 )
             ),
         }
     )
+
+
+def quick_reason_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
+    """Define a reason without leaving the mapping form.
+
+    Only a latch is offered: it is the one kind a mapping can point at, and it needs
+    a single extra field rather than a window's two independently specified edges.
+    """
+    defaults = defaults or {}
+    return vol.Schema(
+        {
+            vol.Required(CONF_NAME, default=defaults.get(CONF_NAME, "")): cv.string,
+            vol.Required(
+                CONF_PRIORITY, default=defaults.get(CONF_PRIORITY, DEFAULT_PRIORITY)
+            ): PRIORITY_SELECTOR,
+            vol.Required(
+                CONF_STATE, default=defaults.get(CONF_STATE, DesiredState.ON.value)
+            ): _select((DesiredState.ON.value, DesiredState.OFF.value), CONF_STATE),
+            vol.Required(
+                CONF_ENTITIES, default=defaults.get(CONF_ENTITIES, [])
+            ): SWITCHES_SELECTOR,
+            vol.Required(
+                CONF_MAX_HOLD,
+                default=defaults.get(
+                    CONF_MAX_HOLD, {"hours": 12, "minutes": 0, "seconds": 0}
+                ),
+            ): DURATION_SELECTOR,
+        }
+    )
+
+
+def quick_reason_data(user_input: dict[str, Any]) -> dict[str, Any]:
+    """Turn the quick-create form into a stored reason subentry."""
+    return {
+        CONF_NAME: user_input[CONF_NAME],
+        CONF_PRIORITY: user_input[CONF_PRIORITY],
+        CONF_STATE: user_input[CONF_STATE],
+        CONF_MEMBERSHIP: Membership.ENTITIES.value,
+        CONF_ENTITIES: user_input[CONF_ENTITIES],
+        CONF_LIFETIME: Lifetime.LATCH.value,
+        CONF_MAX_HOLD: user_input[CONF_MAX_HOLD],
+    }
 
 
 # -- stored dict -> model -----------------------------------------------------

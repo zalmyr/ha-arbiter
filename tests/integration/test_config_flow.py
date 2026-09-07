@@ -49,6 +49,7 @@ from custom_components.arbiter.const import (
     SourceAction,
     TieBreak,
 )
+from custom_components.arbiter.schema import CREATE_REASON
 from tests.conftest import (
     DAILY_ON,
     GLOBAL_OVERRIDE,
@@ -246,13 +247,111 @@ async def test_add_switch(hass: HomeAssistant, helpers, switches):
     assert hass.states.get("binary_sensor.porch_should_be_on") is not None
 
 
-async def test_mapping_needs_a_reason_to_point_at(hass: HomeAssistant, helpers, switches):
-    """A mapping with no reasons defined would dangle, so the flow says so."""
+async def test_mapping_offers_to_create_a_reason_when_there_are_none(
+    hass: HomeAssistant, helpers, switches
+):
+    """With nothing defined the form used to dead-end; now it offers to create one."""
     entry = await setup_entry(hass, data=GLOBALS_INPUT, subentries=[])
 
     result = await start_subentry(hass, entry, SUBENTRY_SOURCE)
-    assert result["type"] is FlowResultType.ABORT
-    assert result["reason"] == "no_reasons"
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "user"
+
+
+async def test_mapping_can_create_its_reason_inline(hass: HomeAssistant, helpers, switches):
+    """The + defines a reason and finishes the mapping in one pass."""
+    entry = await setup_entry(hass, data=GLOBALS_INPUT, subentries=[])
+
+    result = await start_subentry(hass, entry, SUBENTRY_SOURCE)
+    result = await hass.config_entries.subentries.async_configure(
+        result["flow_id"],
+        {
+            CONF_AUTOMATION: PARTY_ON,
+            CONF_ACTION: SourceAction.OPENS.value,
+            CONF_REASON: CREATE_REASON,
+        },
+    )
+    assert result["step_id"] == "create_reason"
+
+    result = await hass.config_entries.subentries.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "party",
+            CONF_PRIORITY: 50,
+            CONF_STATE: "on",
+            CONF_ENTITIES: [PORCH],
+            CONF_MAX_HOLD: {"hours": 12, "minutes": 0, "seconds": 0},
+        },
+    )
+    await hass.async_block_till_done()
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["title"] == f"{PARTY_ON} opens party"
+
+    by_type: dict[str, list] = {}
+    for sub in entry.subentries.values():
+        by_type.setdefault(sub.subentry_type, []).append(sub)
+
+    # Both the reason and the mapping that needed it now exist...
+    assert [s.data[CONF_NAME] for s in by_type[SUBENTRY_REASON]] == ["party"]
+    assert len(by_type[SUBENTRY_SOURCE]) == 1
+
+    # ...and the mapping is not dangling.
+    hub = entry.runtime_data
+    assert hub.problems == []
+    assert hub.config.sources[PARTY_ON][0].reason == "party"
+
+
+async def test_mapping_does_not_offer_window_reasons(
+    hass: HomeAssistant, helpers, switches
+):
+    """A source pointed at a window is ignored, so windows are left out of the list."""
+    entry = await setup_entry(
+        hass,
+        data=GLOBALS_INPUT,
+        subentries=[
+            _reason_subentry("party", Lifetime.LATCH),
+            _reason_subentry("daily", Lifetime.WINDOW),
+        ],
+    )
+
+    result = await start_subentry(hass, entry, SUBENTRY_SOURCE)
+    options = _reason_options(result["data_schema"])
+
+    assert "party" in options
+    assert "daily" not in options
+    assert CREATE_REASON in options
+
+
+def _reason_subentry(name: str, lifetime: Lifetime) -> dict:
+    """A minimal stored reason of either lifetime."""
+    data = {
+        CONF_NAME: name,
+        CONF_PRIORITY: 50,
+        CONF_STATE: "on",
+        CONF_MEMBERSHIP: Membership.ENTITIES.value,
+        CONF_ENTITIES: [PORCH],
+        CONF_LIFETIME: lifetime.value,
+    }
+    if lifetime is Lifetime.LATCH:
+        data[CONF_MAX_HOLD] = {"hours": 12, "minutes": 0, "seconds": 0}
+    else:
+        data[CONF_START] = {CONF_KIND: "time", CONF_TIME: "07:00:00"}
+        data[CONF_END] = {CONF_KIND: "time", CONF_TIME: "22:00:00"}
+    return {
+        "data": data,
+        "subentry_type": SUBENTRY_REASON,
+        "title": name,
+        "unique_id": f"reason:{name}",
+    }
+
+
+def _reason_options(schema) -> list[str]:
+    """Pull the reason dropdown's option values out of a rendered form schema."""
+    for key, validator in schema.schema.items():
+        if str(key) == CONF_REASON:
+            return [option["value"] for option in validator.config["options"]]
+    raise AssertionError("the form has no reason field")
 
 
 async def test_add_source_mapping(hass: HomeAssistant, helpers, switches):
