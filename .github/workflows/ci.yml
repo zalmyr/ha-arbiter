@@ -23,7 +23,12 @@ jobs:
       - uses: hacs/action@main
         with:
           category: integration
-          ignore: brands
+          # topics/description are requirements for inclusion in the HACS *default
+          # store*, not for installing this as a custom repository, and they are
+          # repository settings rather than files — nothing in a commit can satisfy
+          # them. Set a description and topics on the repo and these two can come
+          # back off the list.
+          ignore: brands topics description
 
   tests:
     name: Tests
@@ -34,6 +39,10 @@ jobs:
         with:
           python-version: "3.13"
           cache: pip
+          # setup-python looks for requirements.txt / pyproject.toml by default and
+          # fails the job outright when it finds neither. This repo pins its test deps
+          # in requirements_test.txt, so point the cache at that.
+          cache-dependency-path: requirements_test.txt
       - run: pip install -r requirements_test.txt
       - run: pytest
 
