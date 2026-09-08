@@ -4,6 +4,8 @@ on:
   push:
     branches: ["**"]
   pull_request:
+  # Recovery path for a version bump that never gets a push event of its own.
+  workflow_dispatch:
 
 jobs:
   hassfest:
@@ -34,3 +36,45 @@ jobs:
           cache: pip
       - run: pip install -r requirements_test.txt
       - run: pytest
+
+  # HACS reports the tag of the latest published release, not the manifest version, so
+  # a bump that is never released is invisible to it. Cutting the release here makes it
+  # a consequence of the bump — and `needs` keeps it from cutting one off a red commit.
+  release:
+    name: Publish release
+    needs: [hassfest, hacs, tests]
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      # Ask GitHub what exists rather than diffing the manifest against the parent
+      # commit: this stays correct across re-runs, merges, reverts and force-pushes.
+      - id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          version=$(jq -r .version custom_components/arbiter/manifest.json)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if gh release view "v$version" >/dev/null 2>&1; then
+            echo "v$version is already published; nothing to do"
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - if: steps.check.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.check.outputs.version }}
+        run: |
+          awk -v v="## $VERSION" '$0==v{f=1;next} f&&/^## /{exit} f' CHANGELOG.md > notes.md
+          [ -s notes.md ] || echo "See CHANGELOG.md for what changed in $VERSION." > notes.md
+          # --target pins the tag to the commit that just passed, not to whatever the
+          # default branch has moved on to.
+          gh release create "v$VERSION" \
+            --title "v$VERSION" \
+            --target "$GITHUB_SHA" \
+            --notes-file notes.md
